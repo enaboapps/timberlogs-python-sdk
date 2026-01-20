@@ -1,5 +1,7 @@
 """Tests for the Timberlogs client."""
 
+from unittest.mock import MagicMock, patch
+
 import pytest
 
 from timberlogs import (
@@ -32,177 +34,36 @@ class TestTimberlogsClient:
         )
         assert client is not None
 
-    def test_log_levels(self) -> None:
-        """Test all log level methods."""
-        logs: list = []
-
-        def capture_logs(batch: list) -> None:
-            logs.extend(batch)
-
-        client = create_timberlogs(
-            source="test-app",
-            environment="development",
-        )
-        client.connect(create_batch_logs=capture_logs)
-
-        client.debug("Debug message")
-        client.info("Info message")
-        client.warn("Warn message")
-        client.error("Error message")
-        client.flush()
-
-        assert len(logs) == 4
-        assert logs[0]["level"] == "debug"
-        assert logs[1]["level"] == "info"
-        assert logs[2]["level"] == "warn"
-        assert logs[3]["level"] == "error"
-
-    def test_log_with_data(self) -> None:
-        """Test logging with data."""
-        logs: list = []
-
-        def capture_logs(batch: list) -> None:
-            logs.extend(batch)
-
-        client = create_timberlogs(
-            source="test-app",
-            environment="development",
-        )
-        client.connect(create_batch_logs=capture_logs)
-
-        client.info("Test message", {"key": "value", "number": 42})
-        client.flush()
-
-        assert len(logs) == 1
-        assert logs[0]["data"] == {"key": "value", "number": 42}
-
-    def test_log_with_tags(self) -> None:
-        """Test logging with tags."""
-        logs: list = []
-
-        def capture_logs(batch: list) -> None:
-            logs.extend(batch)
-
-        client = create_timberlogs(
-            source="test-app",
-            environment="development",
-        )
-        client.connect(create_batch_logs=capture_logs)
-
-        client.info("Test message", None, LogOptions(tags=["tag1", "tag2"]))
-        client.flush()
-
-        assert len(logs) == 1
-        assert logs[0]["tags"] == ["tag1", "tag2"]
-
-    def test_error_with_exception(self) -> None:
-        """Test error logging with Exception."""
-        logs: list = []
-
-        def capture_logs(batch: list) -> None:
-            logs.extend(batch)
-
-        client = create_timberlogs(
-            source="test-app",
-            environment="development",
-        )
-        client.connect(create_batch_logs=capture_logs)
-
-        try:
-            raise ValueError("Test error")
-        except Exception as e:
-            client.error("Operation failed", e)
-
-        client.flush()
-
-        assert len(logs) == 1
-        assert logs[0]["errorName"] == "ValueError"
-        assert "ValueError: Test error" in logs[0]["errorStack"]
-        assert logs[0]["data"]["message"] == "Test error"
-
     def test_set_user_id(self) -> None:
         """Test setting user ID."""
-        logs: list = []
-
-        def capture_logs(batch: list) -> None:
-            logs.extend(batch)
-
         client = create_timberlogs(
             source="test-app",
             environment="development",
         )
-        client.connect(create_batch_logs=capture_logs)
-
-        client.set_user_id("user_123")
-        client.info("Test message")
-        client.flush()
-
-        assert len(logs) == 1
-        assert logs[0]["userId"] == "user_123"
+        result = client.set_user_id("user_123")
+        assert result is client  # Returns self for chaining
+        assert client._user_id == "user_123"
 
     def test_set_session_id(self) -> None:
         """Test setting session ID."""
-        logs: list = []
-
-        def capture_logs(batch: list) -> None:
-            logs.extend(batch)
-
         client = create_timberlogs(
             source="test-app",
             environment="development",
         )
-        client.connect(create_batch_logs=capture_logs)
-
-        client.set_session_id("sess_abc")
-        client.info("Test message")
-        client.flush()
-
-        assert len(logs) == 1
-        assert logs[0]["sessionId"] == "sess_abc"
+        result = client.set_session_id("sess_abc")
+        assert result is client  # Returns self for chaining
+        assert client._session_id == "sess_abc"
 
     def test_method_chaining(self) -> None:
         """Test method chaining."""
-        logs: list = []
-
-        def capture_logs(batch: list) -> None:
-            logs.extend(batch)
-
         client = create_timberlogs(
             source="test-app",
             environment="development",
         )
-        client.connect(create_batch_logs=capture_logs)
-
-        client.set_user_id("user_123").set_session_id("sess_abc").info("Chained")
-        client.flush()
-
-        assert len(logs) == 1
-        assert logs[0]["userId"] == "user_123"
-        assert logs[0]["sessionId"] == "sess_abc"
-
-    def test_min_level_filtering(self) -> None:
-        """Test log level filtering."""
-        logs: list = []
-
-        def capture_logs(batch: list) -> None:
-            logs.extend(batch)
-
-        client = create_timberlogs(
-            source="test-app",
-            environment="development",
-            min_level="warn",
-        )
-        client.connect(create_batch_logs=capture_logs)
-
-        client.debug("Not sent")
-        client.info("Not sent")
-        client.warn("Sent")
-        client.error("Sent")
-        client.flush()
-
-        assert len(logs) == 2
-        assert logs[0]["level"] == "warn"
-        assert logs[1]["level"] == "error"
+        result = client.set_user_id("user_123").set_session_id("sess_abc")
+        assert result is client
+        assert client._user_id == "user_123"
+        assert client._session_id == "sess_abc"
 
     def test_should_log(self) -> None:
         """Test should_log method."""
@@ -217,112 +78,75 @@ class TestTimberlogsClient:
         assert client.should_log("warn") is True
         assert client.should_log("error") is True
 
-    def test_source_and_environment(self) -> None:
-        """Test that source and environment are included in logs."""
-        logs: list = []
+    def test_should_log_debug_level(self) -> None:
+        """Test should_log with debug min level."""
+        client = create_timberlogs(
+            source="test-app",
+            environment="development",
+            min_level="debug",
+        )
 
-        def capture_logs(batch: list) -> None:
-            logs.extend(batch)
+        assert client.should_log("debug") is True
+        assert client.should_log("info") is True
+        assert client.should_log("warn") is True
+        assert client.should_log("error") is True
 
+    def test_should_log_error_level(self) -> None:
+        """Test should_log with error min level."""
+        client = create_timberlogs(
+            source="test-app",
+            environment="development",
+            min_level="error",
+        )
+
+        assert client.should_log("debug") is False
+        assert client.should_log("info") is False
+        assert client.should_log("warn") is False
+        assert client.should_log("error") is True
+
+    def test_build_log_payload(self) -> None:
+        """Test building log payload."""
+        client = create_timberlogs(
+            source="my-service",
+            environment="production",
+            version="1.2.3",
+        )
+        client.set_user_id("user_123")
+        client.set_session_id("sess_abc")
+
+        entry = LogEntry(
+            level="info",
+            message="Test message",
+            data={"key": "value"},
+        )
+
+        payload = client._build_log_payload(entry)
+
+        assert payload["level"] == "info"
+        assert payload["message"] == "Test message"
+        assert payload["source"] == "my-service"
+        assert payload["environment"] == "production"
+        assert payload["version"] == "1.2.3"
+        assert payload["userId"] == "user_123"
+        assert payload["sessionId"] == "sess_abc"
+        assert payload["data"] == {"key": "value"}
+
+    def test_build_log_payload_entry_overrides(self) -> None:
+        """Test that entry values override defaults."""
         client = create_timberlogs(
             source="my-service",
             environment="production",
         )
-        client.connect(create_batch_logs=capture_logs)
+        client.set_user_id("default_user")
 
-        client.info("Test")
-        client.flush()
-
-        assert len(logs) == 1
-        assert logs[0]["source"] == "my-service"
-        assert logs[0]["environment"] == "production"
-
-    def test_version_included(self) -> None:
-        """Test that version is included when set."""
-        logs: list = []
-
-        def capture_logs(batch: list) -> None:
-            logs.extend(batch)
-
-        client = create_timberlogs(
-            source="test-app",
-            environment="development",
-            version="1.2.3",
+        entry = LogEntry(
+            level="info",
+            message="Test message",
+            user_id="override_user",
         )
-        client.connect(create_batch_logs=capture_logs)
 
-        client.info("Test")
-        client.flush()
-
-        assert len(logs) == 1
-        assert logs[0]["version"] == "1.2.3"
-
-    def test_batching(self) -> None:
-        """Test that logs are batched."""
-        batch_count = 0
-        logs: list = []
-
-        def capture_logs(batch: list) -> None:
-            nonlocal batch_count
-            batch_count += 1
-            logs.extend(batch)
-
-        client = create_timberlogs(
-            source="test-app",
-            environment="development",
-            batch_size=3,
-            flush_interval=0,  # Disable auto-flush
-        )
-        client.connect(create_batch_logs=capture_logs)
-
-        # First 3 logs should trigger a flush
-        client.info("Log 1")
-        client.info("Log 2")
-        client.info("Log 3")
-
-        assert batch_count == 1
-        assert len(logs) == 3
-
-        # Next 2 logs won't trigger flush
-        client.info("Log 4")
-        client.info("Log 5")
-        assert batch_count == 1
-
-        # Manual flush
-        client.flush()
-        assert batch_count == 2
-        assert len(logs) == 5
-
-    def test_log_entry_direct(self) -> None:
-        """Test logging with LogEntry directly."""
-        logs: list = []
-
-        def capture_logs(batch: list) -> None:
-            logs.extend(batch)
-
-        client = create_timberlogs(
-            source="test-app",
-            environment="development",
-        )
-        client.connect(create_batch_logs=capture_logs)
-
-        client.log(
-            LogEntry(
-                level="info",
-                message="Direct log",
-                data={"key": "value"},
-                user_id="user_123",
-                request_id="req_xyz",
-                tags=["custom"],
-            )
-        )
-        client.flush()
-
-        assert len(logs) == 1
-        assert logs[0]["message"] == "Direct log"
-        assert logs[0]["userId"] == "user_123"
-        assert logs[0]["requestId"] == "req_xyz"
-        assert logs[0]["tags"] == ["custom"]
+        payload = client._build_log_payload(entry)
+        assert payload["userId"] == "override_user"
 
 
 class TestFlow:
@@ -339,169 +163,159 @@ class TestFlow:
         assert flow.name == "checkout"
         assert flow.id.startswith("checkout-")
 
-    def test_flow_logging(self) -> None:
-        """Test logging within a flow."""
-        logs: list = []
-
-        def capture_logs(batch: list) -> None:
-            logs.extend(batch)
-
+    def test_flow_id_format(self) -> None:
+        """Test flow ID format."""
         client = create_timberlogs(
             source="test-app",
             environment="development",
         )
-        client.connect(create_batch_logs=capture_logs)
+
+        flow = client.flow("my-flow")
+        # Format should be {name}-{8 hex chars}
+        parts = flow.id.split("-")
+        assert parts[0] == "my"
+        assert parts[1] == "flow"
+        assert len(parts[2]) == 8  # hex suffix
+
+    def test_flow_properties(self) -> None:
+        """Test flow properties."""
+        client = create_timberlogs(
+            source="test-app",
+            environment="development",
+        )
 
         flow = client.flow("test-flow")
-        flow.info("Step 1")
-        flow.info("Step 2")
-        flow.info("Step 3")
-        client.flush()
+        assert flow.name == "test-flow"
+        assert isinstance(flow.id, str)
+        assert len(flow.id) > len("test-flow")
 
-        assert len(logs) == 3
-        assert all(log["flowId"] == flow.id for log in logs)
-        assert logs[0]["stepIndex"] == 0
-        assert logs[1]["stepIndex"] == 1
-        assert logs[2]["stepIndex"] == 2
+    def test_flow_step_index_increments(self) -> None:
+        """Test that flow step index increments."""
+        client = create_timberlogs(
+            source="test-app",
+            environment="development",
+        )
+
+        flow = client.flow("test")
+        assert flow._step_index == 0
+
+        # Each log should increment step index
+        flow.info("Step 1")
+        assert flow._step_index == 1
+
+        flow.info("Step 2")
+        assert flow._step_index == 2
+
+        flow.info("Step 3")
+        assert flow._step_index == 3
 
     def test_flow_method_chaining(self) -> None:
         """Test flow method chaining."""
-        logs: list = []
-
-        def capture_logs(batch: list) -> None:
-            logs.extend(batch)
-
         client = create_timberlogs(
             source="test-app",
             environment="development",
         )
-        client.connect(create_batch_logs=capture_logs)
 
-        flow = client.flow("chained-flow")
-        flow.info("Step 1").info("Step 2").info("Step 3")
-        client.flush()
+        flow = client.flow("chained")
+        result = flow.info("Step 1").info("Step 2").info("Step 3")
 
-        assert len(logs) == 3
+        assert result is flow
+        assert flow._step_index == 3
 
-    def test_flow_all_levels(self) -> None:
-        """Test all flow log levels."""
-        logs: list = []
-
-        def capture_logs(batch: list) -> None:
-            logs.extend(batch)
-
-        client = create_timberlogs(
-            source="test-app",
-            environment="development",
-        )
-        client.connect(create_batch_logs=capture_logs)
-
-        flow = client.flow("level-test")
-        flow.debug("Debug")
-        flow.info("Info")
-        flow.warn("Warn")
-        flow.error("Error")
-        client.flush()
-
-        assert len(logs) == 4
-        assert logs[0]["level"] == "debug"
-        assert logs[1]["level"] == "info"
-        assert logs[2]["level"] == "warn"
-        assert logs[3]["level"] == "error"
-
-    def test_flow_error_with_exception(self) -> None:
-        """Test flow error logging with Exception."""
-        logs: list = []
-
-        def capture_logs(batch: list) -> None:
-            logs.extend(batch)
-
-        client = create_timberlogs(
-            source="test-app",
-            environment="development",
-        )
-        client.connect(create_batch_logs=capture_logs)
-
-        flow = client.flow("error-test")
-
-        try:
-            raise RuntimeError("Flow error")
-        except Exception as e:
-            flow.error("Operation failed", e)
-
-        client.flush()
-
-        assert len(logs) == 1
-        assert logs[0]["errorName"] == "RuntimeError"
-        assert "RuntimeError: Flow error" in logs[0]["errorStack"]
-
-    def test_flow_min_level_filtering(self) -> None:
-        """Test flow respects min_level."""
-        logs: list = []
-
-        def capture_logs(batch: list) -> None:
-            logs.extend(batch)
-
+    def test_flow_respects_min_level(self) -> None:
+        """Test flow respects min_level filtering."""
         client = create_timberlogs(
             source="test-app",
             environment="development",
             min_level="info",
         )
-        client.connect(create_batch_logs=capture_logs)
 
-        flow = client.flow("filtered-flow")
-        flow.debug("Not sent")  # Filtered
-        flow.info("First")  # stepIndex 0
-        flow.debug("Not sent")  # Filtered
-        flow.info("Second")  # stepIndex 1
-        client.flush()
+        flow = client.flow("filtered")
 
-        assert len(logs) == 2
-        # Step indices should be sequential without gaps
-        assert logs[0]["stepIndex"] == 0
-        assert logs[1]["stepIndex"] == 1
+        # Debug should not increment
+        flow.debug("Filtered out")
+        assert flow._step_index == 0
 
-    def test_flow_with_data_and_tags(self) -> None:
-        """Test flow logging with data and tags."""
-        logs: list = []
+        # Info should increment
+        flow.info("First log")
+        assert flow._step_index == 1
 
-        def capture_logs(batch: list) -> None:
-            logs.extend(batch)
+        # Debug should still not increment
+        flow.debug("Filtered out again")
+        assert flow._step_index == 1
 
-        client = create_timberlogs(
-            source="test-app",
-            environment="development",
+        # Info should increment
+        flow.info("Second log")
+        assert flow._step_index == 2
+
+
+class TestLogEntry:
+    """Tests for LogEntry."""
+
+    def test_log_entry_to_dict(self) -> None:
+        """Test LogEntry to_dict method."""
+        entry = LogEntry(
+            level="info",
+            message="Test message",
+            data={"key": "value"},
+            user_id="user_123",
+            session_id="sess_abc",
+            request_id="req_xyz",
+            tags=["tag1", "tag2"],
         )
-        client.connect(create_batch_logs=capture_logs)
 
-        flow = client.flow("detailed-flow")
-        flow.info("With data", {"key": "value"}, LogOptions(tags=["important"]))
-        client.flush()
+        result = entry.to_dict()
 
-        assert len(logs) == 1
-        assert logs[0]["data"] == {"key": "value"}
-        assert logs[0]["tags"] == ["important"]
+        assert result["level"] == "info"
+        assert result["message"] == "Test message"
+        assert result["data"] == {"key": "value"}
+        assert result["userId"] == "user_123"
+        assert result["sessionId"] == "sess_abc"
+        assert result["requestId"] == "req_xyz"
+        assert result["tags"] == ["tag1", "tag2"]
 
+    def test_log_entry_minimal(self) -> None:
+        """Test LogEntry with minimal fields."""
+        entry = LogEntry(
+            level="debug",
+            message="Minimal",
+        )
 
-class TestContextManager:
-    """Tests for context manager usage."""
+        result = entry.to_dict()
 
-    def test_sync_context_manager(self) -> None:
-        """Test synchronous context manager."""
-        logs: list = []
+        assert result == {
+            "level": "debug",
+            "message": "Minimal",
+        }
 
-        def capture_logs(batch: list) -> None:
-            logs.extend(batch)
+    def test_log_entry_with_error(self) -> None:
+        """Test LogEntry with error fields."""
+        entry = LogEntry(
+            level="error",
+            message="Error occurred",
+            error_name="ValueError",
+            error_stack="Traceback...",
+        )
 
-        with create_timberlogs(
-            source="test-app",
-            environment="development",
-        ) as client:
-            client.connect(create_batch_logs=capture_logs)
-            client.info("Inside context")
+        result = entry.to_dict()
 
-        # Should auto-flush on exit
-        assert len(logs) == 1
+        assert result["level"] == "error"
+        assert result["errorName"] == "ValueError"
+        assert result["errorStack"] == "Traceback..."
+
+    def test_log_entry_with_flow(self) -> None:
+        """Test LogEntry with flow fields."""
+        entry = LogEntry(
+            level="info",
+            message="Flow step",
+            flow_id="checkout-abc123",
+            step_index=2,
+        )
+
+        result = entry.to_dict()
+
+        assert result["flowId"] == "checkout-abc123"
+        assert result["stepIndex"] == 2
 
 
 class TestConfig:
@@ -535,3 +349,49 @@ class TestConfig:
         assert client._config.retry["max_retries"] == 5
         assert client._config.retry["initial_delay_ms"] == 2000
         assert client._config.retry["max_delay_ms"] == 60000
+
+    def test_config_with_api_key(self) -> None:
+        """Test configuration with API key."""
+        client = create_timberlogs(
+            source="test",
+            environment="production",
+            api_key="tb_live_test",
+        )
+        assert client._config.api_key == "tb_live_test"
+        assert client._http_client is not None
+        client.disconnect()
+
+    def test_config_without_api_key(self) -> None:
+        """Test configuration without API key."""
+        client = create_timberlogs(
+            source="test",
+            environment="development",
+        )
+        assert client._config.api_key is None
+        assert client._http_client is None
+
+
+class TestContextManager:
+    """Tests for context manager usage."""
+
+    def test_sync_context_manager(self) -> None:
+        """Test synchronous context manager."""
+        with create_timberlogs(
+            source="test-app",
+            environment="development",
+        ) as client:
+            assert client is not None
+
+    def test_context_manager_disconnects(self) -> None:
+        """Test that context manager disconnects on exit."""
+        client = create_timberlogs(
+            source="test-app",
+            environment="development",
+            api_key="tb_test_key",
+        )
+
+        with client:
+            assert client._running is True
+
+        assert client._running is False
+        assert client._http_client is None

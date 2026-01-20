@@ -242,25 +242,6 @@ with create_timberlogs(
     timber.info("Logs are auto-flushed on exit")
 ```
 
-## Custom Backend
-
-Connect to a custom backend instead of HTTP:
-
-```python
-def my_batch_handler(logs):
-    # Send logs to your backend
-    for log in logs:
-        print(log)
-
-timber = create_timberlogs(
-    source="my-app",
-    environment="production",
-)
-timber.connect(create_batch_logs=my_batch_handler)
-
-timber.info("Sent to custom backend")
-```
-
 ## Low-Level Logging
 
 For full control over log entries:
@@ -299,7 +280,6 @@ timber.log(LogEntry(
 | `disconnect()` | Flush and stop client |
 | `disconnect_async()` | Async flush and stop |
 | `should_log(level)` | Check if level passes filter |
-| `connect(create_log?, create_batch_logs?)` | Connect custom backend |
 
 ### Flow Methods
 

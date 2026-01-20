@@ -201,10 +201,6 @@ class TimberlogsClient:
         self._lock = threading.Lock()
         self._running = False
 
-        # Custom backend functions
-        self._create_log: Optional[Callable[[Dict[str, Any]], None]] = None
-        self._create_batch_logs: Optional[Callable[[List[Dict[str, Any]]], None]] = None
-
         # Start HTTP transport if API key provided
         if config.api_key:
             self._start_http_transport()
@@ -230,24 +226,6 @@ class TimberlogsClient:
             self.flush()
         finally:
             self._schedule_flush()
-
-    def connect(
-        self,
-        create_log: Optional[Callable[[Dict[str, Any]], None]] = None,
-        create_batch_logs: Optional[Callable[[List[Dict[str, Any]]], None]] = None,
-    ) -> "TimberlogsClient":
-        """Connect to a custom backend.
-
-        Args:
-            create_log: Function to handle single log entries.
-            create_batch_logs: Function to handle batched log entries.
-
-        Returns:
-            self for method chaining.
-        """
-        self._create_log = create_log
-        self._create_batch_logs = create_batch_logs
-        return self
 
     def should_log(self, level: LogLevel) -> bool:
         """Check if a log level should be sent based on min_level config.
@@ -314,17 +292,6 @@ class TimberlogsClient:
             return self
 
         payload = self._build_log_payload(entry)
-
-        # If custom backend, use it
-        if self._create_log or self._create_batch_logs:
-            if self._create_batch_logs:
-                with self._lock:
-                    self._queue.append(payload)
-                    if len(self._queue) >= self._config.batch_size:
-                        self._flush_custom()
-            elif self._create_log:
-                self._create_log(payload)
-            return self
 
         # Queue for HTTP transport
         with self._lock:
@@ -444,20 +411,6 @@ class TimberlogsClient:
 
         return self.log(entry)
 
-    def _flush_custom(self) -> None:
-        """Flush logs to custom backend."""
-        with self._lock:
-            if not self._queue:
-                return
-            logs = self._queue.copy()
-            self._queue.clear()
-
-        if self._create_batch_logs:
-            try:
-                self._create_batch_logs(logs)
-            except Exception as e:
-                self._handle_error(e, logs)
-
     def _flush_http(self) -> None:
         """Flush logs via HTTP with retry logic."""
         with self._lock:
@@ -513,10 +466,7 @@ class TimberlogsClient:
 
     def flush(self) -> None:
         """Immediately send all queued logs."""
-        if self._create_batch_logs:
-            self._flush_custom()
-        else:
-            self._flush_http()
+        self._flush_http()
 
     async def flush_async(self) -> None:
         """Asynchronously send all queued logs."""
