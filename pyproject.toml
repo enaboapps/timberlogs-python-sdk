@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "timberlogs"
+name = "timberlogs-client"
 version = "1.0.0"
 description = "Official Timberlogs SDK for Python - structured logging made simple"
 readme = "README.md"

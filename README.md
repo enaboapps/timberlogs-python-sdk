@@ -5,7 +5,7 @@ The official Timberlogs SDK for Python applications. Send structured logs to [Ti
 ## Installation
 
 ```bash
-pip install timberlogs
+pip install timberlogs-client
 ```
 
 ## Quick Start
