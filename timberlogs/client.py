@@ -450,7 +450,7 @@ class TimberlogsClient:
                 )
                 response.raise_for_status()
                 return  # Success
-            except Exception as e:
+            except (httpx.RequestError, httpx.HTTPStatusError) as e:
                 last_error = e
                 if attempt < max_retries:
                     time.sleep(delay_ms / 1000)
@@ -510,7 +510,7 @@ class TimberlogsClient:
                 )
                 response.raise_for_status()
                 return  # Success
-            except Exception as e:
+            except (httpx.RequestError, httpx.HTTPStatusError) as e:
                 last_error = e
                 if attempt < max_retries:
                     await asyncio.sleep(delay_ms / 1000)
