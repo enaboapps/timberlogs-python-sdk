@@ -600,6 +600,18 @@ class TimberlogsClient:
             self._http_client.close()
             self._http_client = None
 
+        if self._async_http_client:
+            try:
+                import asyncio
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    loop.create_task(self._async_http_client.aclose())
+                else:
+                    loop.run_until_complete(self._async_http_client.aclose())
+            except RuntimeError:
+                pass
+            self._async_http_client = None
+
     async def disconnect_async(self) -> None:
         """Asynchronously flush logs and stop the client."""
         with self._lock:
