@@ -211,12 +211,15 @@ class TimberlogsClient:
     def _start_http_transport(self) -> None:
         """Start the HTTP transport for sending logs."""
         self._http_client = httpx.Client(timeout=30.0)
-        self._running = True
+        with self._lock:
+            self._running = True
         self._schedule_flush()
 
     def _schedule_flush(self) -> None:
         """Schedule the next auto-flush."""
-        if self._running and self._config.flush_interval > 0:
+        with self._lock:
+            should_schedule = self._running and self._config.flush_interval > 0
+        if should_schedule:
             self._flush_timer = threading.Timer(
                 self._config.flush_interval, self._auto_flush
             )
@@ -585,10 +588,11 @@ class TimberlogsClient:
 
     def disconnect(self) -> None:
         """Flush logs and stop the client."""
-        self._running = False
-        if self._flush_timer:
-            self._flush_timer.cancel()
-            self._flush_timer = None
+        with self._lock:
+            self._running = False
+            if self._flush_timer:
+                self._flush_timer.cancel()
+                self._flush_timer = None
 
         self.flush()
 
@@ -598,10 +602,11 @@ class TimberlogsClient:
 
     async def disconnect_async(self) -> None:
         """Asynchronously flush logs and stop the client."""
-        self._running = False
-        if self._flush_timer:
-            self._flush_timer.cancel()
-            self._flush_timer = None
+        with self._lock:
+            self._running = False
+            if self._flush_timer:
+                self._flush_timer.cancel()
+                self._flush_timer = None
 
         await self.flush_async()
 
