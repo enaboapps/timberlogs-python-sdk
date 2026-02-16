@@ -34,6 +34,8 @@ class LogEntryDict(TypedDict, total=False):
     flow_id: Optional[str]
     step_index: Optional[int]
     dataset: Optional[str]
+    ip_address: Optional[str]
+    country: Optional[str]
 
 
 @dataclass
@@ -52,6 +54,8 @@ class LogEntry:
     flow_id: Optional[str] = None
     step_index: Optional[int] = None
     dataset: Optional[str] = None
+    ip_address: Optional[str] = None
+    country: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for API serialization."""
@@ -79,6 +83,10 @@ class LogEntry:
             result["stepIndex"] = self.step_index
         if self.dataset is not None:
             result["dataset"] = self.dataset
+        if self.ip_address is not None:
+            result["ipAddress"] = self.ip_address
+        if self.country is not None:
+            result["country"] = self.country
         return result
 
 
