@@ -17,6 +17,7 @@ from .types import (
     LogLevel,
     LogOptions,
     TimberlogsConfig,
+    validate_log_payload,
 )
 
 T = TypeVar("T", bound="TimberlogsClient")
@@ -283,6 +284,7 @@ class TimberlogsClient:
         if "sessionId" not in payload and self._session_id:
             payload["sessionId"] = self._session_id
 
+        validate_log_payload(payload)
         return payload
 
     def log(self, entry: LogEntry) -> "TimberlogsClient":

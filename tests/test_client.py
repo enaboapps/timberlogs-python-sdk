@@ -11,6 +11,7 @@ from timberlogs import (
     LogOptions,
     TimberlogsClient,
     TimberlogsConfig,
+    ValidationError,
     create_timberlogs,
 )
 
@@ -739,3 +740,107 @@ class TestHTTPRequests:
         assert len(errors) == 1
         assert "503" in errors[0]
         client.disconnect()
+
+
+class TestValidation:
+    """Tests for input validation."""
+
+    def test_empty_message_rejected(self) -> None:
+        """Test that empty message raises ValidationError."""
+        client = create_timberlogs(
+            source="test-app",
+            environment="development",
+        )
+        with pytest.raises(ValidationError, match="message must be at least 1"):
+            client.info("")
+
+    def test_message_too_long_rejected(self) -> None:
+        """Test that message exceeding 10000 chars raises ValidationError."""
+        client = create_timberlogs(
+            source="test-app",
+            environment="development",
+        )
+        with pytest.raises(ValidationError, match="message exceeds 10000"):
+            client.info("x" * 10001)
+
+    def test_valid_message_accepted(self) -> None:
+        """Test that a valid long message is accepted."""
+        client = create_timberlogs(
+            source="test-app",
+            environment="development",
+        )
+        client.info("x" * 10000)
+
+    def test_too_many_tags_rejected(self) -> None:
+        """Test that more than 20 tags raises ValidationError."""
+        client = create_timberlogs(
+            source="test-app",
+            environment="development",
+        )
+        with pytest.raises(ValidationError, match="tags must have at most 20"):
+            client.info("test", options=LogOptions(tags=[f"tag{i}" for i in range(21)]))
+
+    def test_tag_too_long_rejected(self) -> None:
+        """Test that a tag exceeding 50 chars raises ValidationError."""
+        client = create_timberlogs(
+            source="test-app",
+            environment="development",
+        )
+        with pytest.raises(ValidationError, match="tags\\[0\\] exceeds 50"):
+            client.info("test", options=LogOptions(tags=["x" * 51]))
+
+    def test_user_id_too_long_rejected(self) -> None:
+        """Test that userId exceeding 100 chars raises ValidationError."""
+        client = create_timberlogs(
+            source="test-app",
+            environment="development",
+        )
+        with pytest.raises(ValidationError, match="userId exceeds 100"):
+            client.log(LogEntry(level="info", message="test", user_id="x" * 101))
+
+    def test_error_name_too_long_rejected(self) -> None:
+        """Test that errorName exceeding 200 chars raises ValidationError."""
+        client = create_timberlogs(
+            source="test-app",
+            environment="development",
+        )
+        with pytest.raises(ValidationError, match="errorName exceeds 200"):
+            client.log(LogEntry(
+                level="error",
+                message="test",
+                error_name="x" * 201,
+            ))
+
+    def test_step_index_out_of_range_rejected(self) -> None:
+        """Test that stepIndex > 1000 raises ValidationError."""
+        client = create_timberlogs(
+            source="test-app",
+            environment="development",
+        )
+        with pytest.raises(ValidationError, match="stepIndex must be 0-1000"):
+            client.log(LogEntry(
+                level="info",
+                message="test",
+                flow_id="test-flow",
+                step_index=1001,
+            ))
+
+    def test_valid_payload_passes(self) -> None:
+        """Test that a fully valid payload passes validation."""
+        client = create_timberlogs(
+            source="test-app",
+            environment="development",
+            version="1.0.0",
+            dataset="my-dataset",
+        )
+        client.set_user_id("user_123")
+        client.set_session_id("sess_abc")
+        client.log(LogEntry(
+            level="info",
+            message="Valid message",
+            data={"key": "value"},
+            request_id="req_xyz",
+            tags=["tag1", "tag2"],
+            flow_id="flow-123",
+            step_index=5,
+        ))
