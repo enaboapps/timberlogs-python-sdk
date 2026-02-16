@@ -271,6 +271,10 @@ class TimberlogsClient:
         if self._config.version:
             payload["version"] = self._config.version
 
+        # Apply dataset: entry-level overrides config-level
+        if "dataset" not in payload and self._config.dataset:
+            payload["dataset"] = self._config.dataset
+
         # Apply defaults if not set in entry
         if "userId" not in payload and self._user_id:
             payload["userId"] = self._user_id
@@ -617,6 +621,7 @@ def create_timberlogs(
     environment: Environment,
     api_key: Optional[str] = None,
     endpoint: str = LOGS_ENDPOINT,
+    dataset: Optional[str] = None,
     version: Optional[str] = None,
     user_id: Optional[str] = None,
     session_id: Optional[str] = None,
@@ -637,6 +642,7 @@ def create_timberlogs(
         environment: The environment (development, staging, production).
         api_key: Your Timberlogs API key (starts with tb_live_ or tb_test_).
         endpoint: The ingestion endpoint URL.
+        dataset: The dataset to send logs to (defaults to "default" server-side).
         version: Your application version.
         user_id: Default user ID for all logs.
         session_id: Default session ID for all logs.
@@ -664,6 +670,7 @@ def create_timberlogs(
         environment=environment,
         api_key=api_key,
         endpoint=endpoint,
+        dataset=dataset,
         version=version,
         user_id=user_id,
         session_id=session_id,
