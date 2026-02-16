@@ -552,18 +552,28 @@ class TimberlogsClient:
         if self._async_http_client is None:
             self._async_http_client = httpx.AsyncClient(timeout=30.0)
 
-        response = await self._async_http_client.post(
-            FLOWS_ENDPOINT,
-            json={"name": name},
-            headers={
-                "Content-Type": "application/json",
-                "X-API-Key": self._config.api_key,
-            },
-        )
-        response.raise_for_status()
-        data = response.json()
+        try:
+            response = await self._async_http_client.post(
+                FLOWS_ENDPOINT,
+                json={"name": name},
+                headers={
+                    "Content-Type": "application/json",
+                    "X-API-Key": self._config.api_key,
+                },
+            )
+            response.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            raise RuntimeError(f"Failed to create flow: HTTP {e.response.status_code}") from e
+        except httpx.RequestError as e:
+            raise RuntimeError(f"Failed to create flow: {e}") from e
 
-        return Flow(data["flowId"], data["name"], self)
+        data = response.json()
+        flow_id = data.get("flowId")
+        flow_name = data.get("name", name)
+        if not flow_id:
+            raise RuntimeError(f"Invalid flow response: missing flowId")
+
+        return Flow(flow_id, flow_name, self)
 
     def disconnect(self) -> None:
         """Flush logs and stop the client."""
