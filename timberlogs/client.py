@@ -81,6 +81,8 @@ class Flow:
             tags=options.tags if options else None,
             flow_id=self._id,
             step_index=self._step_index,
+            user_id=self._client._user_id,
+            session_id=self._client._session_id,
         )
 
         # Handle error objects
