@@ -561,3 +561,181 @@ class TestAsyncClient:
             assert client._running is True
 
         assert client._running is False
+
+
+class TestHTTPRequests:
+    """Tests for HTTP request behavior using mocked HTTP.
+
+    All tests use flush_interval=0 to disable the auto-flush timer,
+    preventing background flushes from interfering with mock assertions.
+    """
+
+    def test_sync_flush_sends_correct_headers(self, httpx_mock) -> None:
+        """Test that sync flush sends correct headers."""
+        httpx_mock.add_response(
+            url="https://timberlogs-ingest.enaboapps.workers.dev/v1/logs",
+            method="POST",
+            status_code=200,
+        )
+        client = create_timberlogs(
+            source="test-app",
+            environment="production",
+            api_key="tb_live_abc123",
+            flush_interval=0,
+        )
+        client.info("test message")
+        client.flush()
+
+        requests = httpx_mock.get_requests()
+        assert len(requests) == 1
+        assert requests[0].headers["Content-Type"] == "application/json"
+        assert requests[0].headers["X-API-Key"] == "tb_live_abc123"
+        client.disconnect()
+
+    def test_sync_flush_sends_correct_payload(self, httpx_mock) -> None:
+        """Test that sync flush sends correct log payload."""
+        httpx_mock.add_response(
+            url="https://timberlogs-ingest.enaboapps.workers.dev/v1/logs",
+            method="POST",
+            status_code=200,
+        )
+        client = create_timberlogs(
+            source="my-service",
+            environment="production",
+            api_key="tb_live_abc",
+            version="2.0.0",
+            flush_interval=0,
+        )
+        client.set_user_id("user_42")
+        client.info("Hello", {"key": "value"}, LogOptions(tags=["tag1"]))
+        client.flush()
+
+        requests = httpx_mock.get_requests()
+        import json
+
+        body = json.loads(requests[0].content)
+        assert "logs" in body
+        assert len(body["logs"]) == 1
+        log = body["logs"][0]
+        assert log["level"] == "info"
+        assert log["message"] == "Hello"
+        assert log["source"] == "my-service"
+        assert log["environment"] == "production"
+        assert log["version"] == "2.0.0"
+        assert log["userId"] == "user_42"
+        assert log["data"] == {"key": "value"}
+        assert log["tags"] == ["tag1"]
+        client.disconnect()
+
+    def test_sync_flush_batches_multiple_logs(self, httpx_mock) -> None:
+        """Test that multiple logs are batched in a single request."""
+        httpx_mock.add_response(
+            url="https://timberlogs-ingest.enaboapps.workers.dev/v1/logs",
+            method="POST",
+            status_code=200,
+        )
+        client = create_timberlogs(
+            source="test-app",
+            environment="production",
+            api_key="tb_live_abc",
+            batch_size=100,
+            flush_interval=0,
+        )
+        for i in range(5):
+            client.info(f"Message {i}")
+        client.flush()
+
+        requests = httpx_mock.get_requests()
+        assert len(requests) == 1
+        import json
+
+        body = json.loads(requests[0].content)
+        assert len(body["logs"]) == 5
+        client.disconnect()
+
+    def test_sync_flush_auto_triggers_on_batch_size(self, httpx_mock) -> None:
+        """Test that flush triggers automatically when batch size is reached."""
+        httpx_mock.add_response(status_code=200)
+        client = create_timberlogs(
+            source="test-app",
+            environment="production",
+            api_key="tb_live_abc",
+            batch_size=3,
+            flush_interval=0,
+        )
+        client.info("msg 1")
+        client.info("msg 2")
+        assert len(httpx_mock.get_requests()) == 0
+
+        client.info("msg 3")
+        assert len(httpx_mock.get_requests()) == 1
+        client.disconnect()
+
+    def test_sync_flush_retry_with_backoff(self, httpx_mock) -> None:
+        """Test that sync flush retries on failure with backoff."""
+        httpx_mock.add_response(status_code=500)
+        httpx_mock.add_response(status_code=500)
+        httpx_mock.add_response(status_code=200)
+
+        client = create_timberlogs(
+            source="test-app",
+            environment="production",
+            api_key="tb_live_abc",
+            max_retries=2,
+            initial_delay_ms=1,
+            max_delay_ms=1,
+            flush_interval=0,
+        )
+        client.info("retry me")
+        client.flush()
+
+        assert len(httpx_mock.get_requests()) == 3
+        assert len(client._queue) == 0
+        client.disconnect()
+
+    def test_sync_flush_requeues_after_all_retries_fail(self, httpx_mock) -> None:
+        """Test that logs are re-queued when all retries fail."""
+        for _ in range(8):
+            httpx_mock.add_response(status_code=500)
+
+        errors = []
+        client = create_timberlogs(
+            source="test-app",
+            environment="production",
+            api_key="tb_live_abc",
+            max_retries=3,
+            initial_delay_ms=1,
+            max_delay_ms=1,
+            flush_interval=0,
+            on_error=lambda e: errors.append(e),
+        )
+        client.info("will fail")
+        client.flush()
+
+        assert len(client._queue) == 1
+        assert len(errors) == 1
+        client.disconnect()
+
+    def test_on_error_callback(self, httpx_mock) -> None:
+        """Test that on_error callback is called on failure."""
+        # 2 for flush (1 attempt + 1 retry) + 2 for disconnect flush
+        for _ in range(4):
+            httpx_mock.add_response(status_code=503)
+
+        errors = []
+        client = create_timberlogs(
+            source="test-app",
+            environment="production",
+            api_key="tb_live_abc",
+            max_retries=1,
+            initial_delay_ms=1,
+            max_delay_ms=1,
+            flush_interval=0,
+            on_error=lambda e: errors.append(str(e)),
+        )
+        client.info("error test")
+        client.flush()
+
+        assert len(errors) == 1
+        assert "503" in errors[0]
+        client.disconnect()
