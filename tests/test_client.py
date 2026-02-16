@@ -2,6 +2,7 @@
 
 from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
 
 from timberlogs import (
@@ -395,3 +396,168 @@ class TestContextManager:
 
         assert client._running is False
         assert client._http_client is None
+
+
+class TestAsyncClient:
+    """Tests for async client methods."""
+
+    async def test_flush_async_empty_queue(self) -> None:
+        """Test flush_async with no queued logs."""
+        client = create_timberlogs(
+            source="test-app",
+            environment="development",
+            api_key="tb_test_key",
+        )
+        await client.flush_async()
+        assert len(client._queue) == 0
+        client.disconnect()
+
+    async def test_flush_async_no_api_key(self) -> None:
+        """Test flush_async without API key skips sending."""
+        client = create_timberlogs(
+            source="test-app",
+            environment="development",
+        )
+        # Without API key, logs aren't queued (no HTTP transport)
+        client.info("test message")
+        await client.flush_async()
+        assert client._async_http_client is None
+
+    async def test_flush_async_sends_logs(self, httpx_mock) -> None:
+        """Test flush_async sends queued logs via HTTP."""
+        httpx_mock.add_response(
+            url="https://timberlogs-ingest.enaboapps.workers.dev/v1/logs",
+            method="POST",
+            status_code=200,
+        )
+        client = create_timberlogs(
+            source="test-app",
+            environment="production",
+            api_key="tb_test_key",
+        )
+        client.info("async log message")
+        assert len(client._queue) == 1
+
+        await client.flush_async()
+        assert len(client._queue) == 0
+
+        requests = httpx_mock.get_requests()
+        assert len(requests) == 1
+        assert requests[0].headers["X-API-Key"] == "tb_test_key"
+        client.disconnect()
+
+    async def test_flush_async_requeues_on_failure(self, httpx_mock) -> None:
+        """Test flush_async re-queues logs on repeated failure."""
+        for _ in range(8):
+            httpx_mock.add_response(status_code=500)
+
+        errors = []
+        client = create_timberlogs(
+            source="test-app",
+            environment="production",
+            api_key="tb_test_key",
+            max_retries=3,
+            initial_delay_ms=1,
+            max_delay_ms=1,
+            on_error=lambda e: errors.append(e),
+        )
+        client.info("will fail")
+        await client.flush_async()
+
+        assert len(client._queue) == 1
+        assert len(errors) == 1
+        await client.disconnect_async()
+
+    async def test_flow_async_requires_api_key(self) -> None:
+        """Test flow_async raises without API key."""
+        client = create_timberlogs(
+            source="test-app",
+            environment="development",
+        )
+        with pytest.raises(RuntimeError, match="API key required"):
+            await client.flow_async("test-flow")
+
+    async def test_flow_async_creates_flow(self, httpx_mock) -> None:
+        """Test flow_async creates a flow with server-generated ID."""
+        httpx_mock.add_response(
+            url="https://timberlogs-ingest.enaboapps.workers.dev/v1/flows",
+            method="POST",
+            json={"flowId": "server-flow-123", "name": "checkout"},
+        )
+        client = create_timberlogs(
+            source="test-app",
+            environment="production",
+            api_key="tb_test_key",
+        )
+        flow = await client.flow_async("checkout")
+        assert flow.id == "server-flow-123"
+        assert flow.name == "checkout"
+        client.disconnect()
+
+    async def test_flow_async_handles_invalid_response(self, httpx_mock) -> None:
+        """Test flow_async raises on missing flowId in response."""
+        httpx_mock.add_response(
+            url="https://timberlogs-ingest.enaboapps.workers.dev/v1/flows",
+            method="POST",
+            json={"unexpected": "data"},
+        )
+        client = create_timberlogs(
+            source="test-app",
+            environment="production",
+            api_key="tb_test_key",
+        )
+        with pytest.raises(RuntimeError, match="missing flowId"):
+            await client.flow_async("test")
+        client.disconnect()
+
+    async def test_flow_async_handles_http_error(self, httpx_mock) -> None:
+        """Test flow_async raises on HTTP error."""
+        httpx_mock.add_response(
+            url="https://timberlogs-ingest.enaboapps.workers.dev/v1/flows",
+            method="POST",
+            status_code=500,
+        )
+        client = create_timberlogs(
+            source="test-app",
+            environment="production",
+            api_key="tb_test_key",
+        )
+        with pytest.raises(RuntimeError, match="HTTP 500"):
+            await client.flow_async("test")
+        client.disconnect()
+
+    async def test_disconnect_async(self, httpx_mock) -> None:
+        """Test disconnect_async flushes and cleans up."""
+        httpx_mock.add_response(
+            url="https://timberlogs-ingest.enaboapps.workers.dev/v1/logs",
+            method="POST",
+            status_code=200,
+        )
+        client = create_timberlogs(
+            source="test-app",
+            environment="production",
+            api_key="tb_test_key",
+        )
+        client.info("final log")
+        await client.disconnect_async()
+
+        assert client._running is False
+        assert client._async_http_client is None
+        assert len(client._queue) == 0
+
+    async def test_async_context_manager(self, httpx_mock) -> None:
+        """Test async context manager."""
+        httpx_mock.add_response(
+            url="https://timberlogs-ingest.enaboapps.workers.dev/v1/logs",
+            method="POST",
+            status_code=200,
+        )
+        async with create_timberlogs(
+            source="test-app",
+            environment="production",
+            api_key="tb_test_key",
+        ) as client:
+            client.info("inside async context")
+            assert client._running is True
+
+        assert client._running is False
