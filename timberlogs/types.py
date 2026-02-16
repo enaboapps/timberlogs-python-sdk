@@ -123,6 +123,62 @@ LOG_LEVEL_PRIORITY: Dict[LogLevel, int] = {
 }
 
 
+class ValidationError(ValueError):
+    """Raised when a log entry or config value fails validation."""
+
+
+def validate_log_payload(payload: Dict[str, Any]) -> None:
+    """Validate a log payload against API constraints.
+
+    Raises:
+        ValidationError: If any field exceeds API limits.
+    """
+    _check_str(payload, "message", 1, 10_000)
+    _check_str(payload, "source", 1, 100)
+    _check_str(payload, "environment", 1, 50)
+    _check_str(payload, "errorName", 0, 200)
+    _check_str(payload, "errorStack", 0, 10_000)
+    _check_str(payload, "userId", 0, 100)
+    _check_str(payload, "sessionId", 0, 100)
+    _check_str(payload, "requestId", 0, 100)
+    _check_str(payload, "version", 0, 50)
+    _check_str(payload, "dataset", 0, 50)
+    _check_str(payload, "flowId", 0, 50)
+
+    if "stepIndex" in payload:
+        step = payload["stepIndex"]
+        if not isinstance(step, int) or step < 0 or step > 1000:
+            raise ValidationError(f"stepIndex must be 0-1000, got {step}")
+
+    tags = payload.get("tags")
+    if tags is not None:
+        if len(tags) > 20:
+            raise ValidationError(f"tags must have at most 20 items, got {len(tags)}")
+        for i, tag in enumerate(tags):
+            if len(tag) > 50:
+                raise ValidationError(
+                    f"tags[{i}] exceeds 50 characters: {len(tag)}"
+                )
+
+
+def _check_str(
+    payload: Dict[str, Any], key: str, min_len: int, max_len: int
+) -> None:
+    value = payload.get(key)
+    if value is None:
+        return
+    if not isinstance(value, str):
+        return
+    if min_len > 0 and len(value) < min_len:
+        raise ValidationError(
+            f"{key} must be at least {min_len} character(s), got {len(value)}"
+        )
+    if len(value) > max_len:
+        raise ValidationError(
+            f"{key} exceeds {max_len} characters: {len(value)}"
+        )
+
+
 __all__ = [
     "LogLevel",
     "Environment",
@@ -132,4 +188,6 @@ __all__ = [
     "LogOptions",
     "TimberlogsConfig",
     "LOG_LEVEL_PRIORITY",
+    "ValidationError",
+    "validate_log_payload",
 ]

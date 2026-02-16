@@ -20,6 +20,7 @@ from .types import (
     LogLevel,
     LogOptions,
     TimberlogsConfig,
+    ValidationError,
 )
 
 __version__ = "1.0.0"
@@ -36,6 +37,7 @@ __all__ = [
     "LogEntry",
     "LogOptions",
     "TimberlogsConfig",
+    "ValidationError",
     # Version
     "__version__",
 ]
