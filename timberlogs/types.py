@@ -33,6 +33,7 @@ class LogEntryDict(TypedDict, total=False):
     tags: Optional[List[str]]
     flow_id: Optional[str]
     step_index: Optional[int]
+    dataset: Optional[str]
 
 
 @dataclass
@@ -50,6 +51,7 @@ class LogEntry:
     tags: Optional[List[str]] = None
     flow_id: Optional[str] = None
     step_index: Optional[int] = None
+    dataset: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for API serialization."""
@@ -75,6 +77,8 @@ class LogEntry:
             result["flowId"] = self.flow_id
         if self.step_index is not None:
             result["stepIndex"] = self.step_index
+        if self.dataset is not None:
+            result["dataset"] = self.dataset
         return result
 
 
@@ -93,6 +97,7 @@ class TimberlogsConfig:
     environment: Environment
     api_key: Optional[str] = None
     endpoint: str = "https://timberlogs-ingest.enaboapps.workers.dev/v1/logs"
+    dataset: Optional[str] = None
     version: Optional[str] = None
     user_id: Optional[str] = None
     session_id: Optional[str] = None
