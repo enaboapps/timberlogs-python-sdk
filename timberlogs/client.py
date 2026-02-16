@@ -200,7 +200,7 @@ class TimberlogsClient:
         self._http_client: Optional[httpx.Client] = None
         self._async_http_client: Optional[httpx.AsyncClient] = None
         self._flush_timer: Optional[threading.Timer] = None
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._running = False
 
         # Start HTTP transport if API key provided
