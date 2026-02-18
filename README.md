@@ -145,7 +145,6 @@ timber = create_timberlogs(
     api_key="tb_live_xxx",              # Your Timberlogs API key
 
     # Optional
-    endpoint="https://...",             # Custom endpoint URL
     version="1.2.3",                    # Your app version
     user_id="user_123",                 # Default user ID
     session_id="sess_abc",              # Default session ID
@@ -291,6 +290,13 @@ timber.log(LogEntry(
 | `error(message, error_or_data?, options?)` | Log error message |
 | `id` | Property: flow ID |
 | `name` | Property: flow name |
+
+## Releasing
+
+1. Bump the version in `pyproject.toml` and `timberlogs/__init__.py`
+2. Commit and push to `master`
+3. Create a GitHub release with tag `vX.Y.Z` (e.g., `v1.1.1`)
+4. The `publish.yml` workflow automatically builds and publishes to PyPI via OIDC trusted publishing
 
 ## Requirements
 
