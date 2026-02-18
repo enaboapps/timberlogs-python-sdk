@@ -444,7 +444,7 @@ class TimberlogsClient:
         for attempt in range(max_retries + 1):
             try:
                 response = self._http_client.post(
-                    self._config.endpoint,
+                    LOGS_ENDPOINT,
                     json={"logs": logs},
                     headers={
                         "Content-Type": "application/json",
@@ -504,7 +504,7 @@ class TimberlogsClient:
         for attempt in range(max_retries + 1):
             try:
                 response = await self._async_http_client.post(
-                    self._config.endpoint,
+                    LOGS_ENDPOINT,
                     json={"logs": logs},
                     headers={
                         "Content-Type": "application/json",
@@ -651,7 +651,6 @@ def create_timberlogs(
     source: str,
     environment: Environment,
     api_key: Optional[str] = None,
-    endpoint: str = LOGS_ENDPOINT,
     dataset: Optional[str] = None,
     version: Optional[str] = None,
     user_id: Optional[str] = None,
@@ -672,7 +671,6 @@ def create_timberlogs(
         source: Your application or service name.
         environment: The environment (development, staging, production).
         api_key: Your Timberlogs API key (starts with tb_live_ or tb_test_).
-        endpoint: The ingestion endpoint URL.
         dataset: The dataset to send logs to (defaults to "default" server-side).
         version: Your application version.
         user_id: Default user ID for all logs.
@@ -700,7 +698,6 @@ def create_timberlogs(
         source=source,
         environment=environment,
         api_key=api_key,
-        endpoint=endpoint,
         dataset=dataset,
         version=version,
         user_id=user_id,
