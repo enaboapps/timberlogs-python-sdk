@@ -104,7 +104,6 @@ class TimberlogsConfig:
     source: str
     environment: Environment
     api_key: Optional[str] = None
-    endpoint: str = "https://timberlogs-ingest.enaboapps.workers.dev/v1/logs"
     dataset: Optional[str] = None
     version: Optional[str] = None
     user_id: Optional[str] = None
