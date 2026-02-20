@@ -16,6 +16,9 @@ Example:
 from .client import Flow, TimberlogsClient, create_timberlogs
 from .types import (
     Environment,
+    FormatName,
+    FORMAT_CONTENT_TYPES,
+    IngestRawOptions,
     LogEntry,
     LogLevel,
     LogOptions,
@@ -34,6 +37,9 @@ __all__ = [
     # Types and config
     "LogLevel",
     "Environment",
+    "FormatName",
+    "FORMAT_CONTENT_TYPES",
+    "IngestRawOptions",
     "LogEntry",
     "LogOptions",
     "TimberlogsConfig",

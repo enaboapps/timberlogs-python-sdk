@@ -7,6 +7,7 @@ import pytest
 
 from timberlogs import (
     Flow,
+    IngestRawOptions,
     LogEntry,
     LogOptions,
     TimberlogsClient,
@@ -844,3 +845,130 @@ class TestValidation:
             flow_id="flow-123",
             step_index=5,
         ))
+
+
+class TestIngestRaw:
+    """Tests for ingest_raw and ingest_raw_async."""
+
+    def test_ingest_raw_raises_without_api_key(self) -> None:
+        client = create_timberlogs(
+            source="test-app",
+            environment="development",
+        )
+        with pytest.raises(RuntimeError, match="api_key"):
+            client.ingest_raw("data", "csv")
+
+    def test_ingest_raw_raises_on_invalid_format(self) -> None:
+        client = create_timberlogs(
+            source="test-app",
+            environment="development",
+            api_key="tb_test_key",
+        )
+        with pytest.raises(ValueError, match="Unsupported format"):
+            client.ingest_raw("data", "invalid")  # type: ignore[arg-type]
+        client.disconnect()
+
+    def test_ingest_raw_sends_correct_request(self, httpx_mock) -> None:
+        httpx_mock.add_response(status_code=200)
+        client = create_timberlogs(
+            source="test-app",
+            environment="production",
+            api_key="tb_test_key",
+            flush_interval=0,
+        )
+        client.ingest_raw(
+            "level,message\ninfo,hello",
+            "csv",
+            IngestRawOptions(source="nginx", environment="production"),
+        )
+
+        requests = httpx_mock.get_requests()
+        assert len(requests) == 1
+        req = requests[0]
+        assert "format=csv" in str(req.url)
+        assert "source=nginx" in str(req.url)
+        assert "environment=production" in str(req.url)
+        assert req.headers["Content-Type"] == "text/csv"
+        assert req.headers["X-API-Key"] == "tb_test_key"
+        assert req.content == b"level,message\ninfo,hello"
+        client.disconnect()
+
+    def test_ingest_raw_sends_jsonl(self, httpx_mock) -> None:
+        httpx_mock.add_response(status_code=200)
+        client = create_timberlogs(
+            source="test-app",
+            environment="production",
+            api_key="tb_test_key",
+            flush_interval=0,
+        )
+        body = '{"message":"line1"}\n{"message":"line2"}'
+        client.ingest_raw(body, "jsonl")
+
+        requests = httpx_mock.get_requests()
+        assert len(requests) == 1
+        assert requests[0].headers["Content-Type"] == "application/x-ndjson"
+        assert "format=jsonl" in str(requests[0].url)
+        client.disconnect()
+
+    def test_ingest_raw_retries_on_failure(self, httpx_mock) -> None:
+        httpx_mock.add_response(status_code=500)
+        httpx_mock.add_response(status_code=200)
+
+        client = create_timberlogs(
+            source="test-app",
+            environment="production",
+            api_key="tb_test_key",
+            max_retries=1,
+            initial_delay_ms=1,
+            max_delay_ms=1,
+            flush_interval=0,
+        )
+        client.ingest_raw("data", "text")
+        assert len(httpx_mock.get_requests()) == 2
+        client.disconnect()
+
+    def test_ingest_raw_raises_after_retries_exhausted(self, httpx_mock) -> None:
+        for _ in range(4):
+            httpx_mock.add_response(status_code=500)
+
+        client = create_timberlogs(
+            source="test-app",
+            environment="production",
+            api_key="tb_test_key",
+            max_retries=3,
+            initial_delay_ms=1,
+            max_delay_ms=1,
+            flush_interval=0,
+        )
+        with pytest.raises(httpx.HTTPStatusError):
+            client.ingest_raw("data", "text")
+        client.disconnect()
+
+    async def test_ingest_raw_async_raises_without_api_key(self) -> None:
+        client = create_timberlogs(
+            source="test-app",
+            environment="development",
+        )
+        with pytest.raises(RuntimeError, match="api_key"):
+            await client.ingest_raw_async("data", "csv")
+
+    async def test_ingest_raw_async_sends_correct_request(self, httpx_mock) -> None:
+        httpx_mock.add_response(status_code=200)
+        client = create_timberlogs(
+            source="test-app",
+            environment="production",
+            api_key="tb_test_key",
+            flush_interval=0,
+        )
+        await client.ingest_raw_async(
+            "<134>1 2024-01-01T00:00:00Z host app - - - msg",
+            "syslog",
+            IngestRawOptions(source="syslog-relay"),
+        )
+
+        requests = httpx_mock.get_requests()
+        assert len(requests) == 1
+        assert requests[0].headers["Content-Type"] == "application/x-syslog"
+        assert "format=syslog" in str(requests[0].url)
+        assert "source=syslog-relay" in str(requests[0].url)
+        await client.disconnect_async()

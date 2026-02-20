@@ -11,8 +11,11 @@ from typing import Any, Callable, Dict, List, Optional, TypeVar, Union
 import httpx
 
 from .types import (
+    FORMAT_CONTENT_TYPES,
     LOG_LEVEL_PRIORITY,
     Environment,
+    FormatName,
+    IngestRawOptions,
     LogEntry,
     LogLevel,
     LogOptions,
@@ -525,6 +528,110 @@ class TimberlogsClient:
 
         if last_error:
             self._handle_error(last_error, logs)
+
+    def _build_raw_url(self, format: FormatName, options: Optional[IngestRawOptions]) -> str:
+        params = {"format": format}
+        if options:
+            if options.source:
+                params["source"] = options.source
+            if options.environment:
+                params["environment"] = options.environment
+            if options.level:
+                params["level"] = options.level
+            if options.dataset:
+                params["dataset"] = options.dataset
+        qs = "&".join(f"{k}={v}" for k, v in params.items())
+        return f"{LOGS_ENDPOINT}?{qs}"
+
+    def ingest_raw(
+        self,
+        body: str,
+        format: FormatName,
+        options: Optional[IngestRawOptions] = None,
+    ) -> None:
+        if not self._config.api_key:
+            raise RuntimeError("HTTP transport requires api_key")
+        if format not in FORMAT_CONTENT_TYPES:
+            raise ValueError(f"Unsupported format: {format}")
+
+        if not self._http_client:
+            self._http_client = httpx.Client(timeout=30.0)
+
+        url = self._build_raw_url(format, options)
+        content_type = FORMAT_CONTENT_TYPES[format]
+
+        retry_config = self._config.retry
+        max_retries = retry_config.get("max_retries", 3)
+        initial_delay_ms = retry_config.get("initial_delay_ms", 1000)
+        max_delay_ms = retry_config.get("max_delay_ms", 30000)
+
+        delay_ms = initial_delay_ms
+        last_error: Optional[Exception] = None
+
+        for attempt in range(max_retries + 1):
+            try:
+                response = self._http_client.post(
+                    url,
+                    content=body,
+                    headers={
+                        "Content-Type": content_type,
+                        "X-API-Key": self._config.api_key,
+                    },
+                )
+                response.raise_for_status()
+                return
+            except (httpx.RequestError, httpx.HTTPStatusError) as e:
+                last_error = e
+                if attempt < max_retries:
+                    time.sleep(delay_ms / 1000)
+                    delay_ms = min(delay_ms * 2, max_delay_ms)
+
+        raise last_error  # type: ignore[misc]
+
+    async def ingest_raw_async(
+        self,
+        body: str,
+        format: FormatName,
+        options: Optional[IngestRawOptions] = None,
+    ) -> None:
+        if not self._config.api_key:
+            raise RuntimeError("HTTP transport requires api_key")
+        if format not in FORMAT_CONTENT_TYPES:
+            raise ValueError(f"Unsupported format: {format}")
+
+        if self._async_http_client is None:
+            self._async_http_client = httpx.AsyncClient(timeout=30.0)
+
+        url = self._build_raw_url(format, options)
+        content_type = FORMAT_CONTENT_TYPES[format]
+
+        retry_config = self._config.retry
+        max_retries = retry_config.get("max_retries", 3)
+        initial_delay_ms = retry_config.get("initial_delay_ms", 1000)
+        max_delay_ms = retry_config.get("max_delay_ms", 30000)
+
+        delay_ms = initial_delay_ms
+        last_error: Optional[Exception] = None
+
+        for attempt in range(max_retries + 1):
+            try:
+                response = await self._async_http_client.post(
+                    url,
+                    content=body,
+                    headers={
+                        "Content-Type": content_type,
+                        "X-API-Key": self._config.api_key,
+                    },
+                )
+                response.raise_for_status()
+                return
+            except (httpx.RequestError, httpx.HTTPStatusError) as e:
+                last_error = e
+                if attempt < max_retries:
+                    await asyncio.sleep(delay_ms / 1000)
+                    delay_ms = min(delay_ms * 2, max_delay_ms)
+
+        raise last_error  # type: ignore[misc]
 
     def flow(self, name: str) -> Flow:
         """Create a new flow for tracking related logs synchronously.
