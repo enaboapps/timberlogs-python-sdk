@@ -186,6 +186,26 @@ def _check_str(
         )
 
 
+FormatName = Literal["json", "jsonl", "syslog", "text", "csv", "obl"]
+
+FORMAT_CONTENT_TYPES: Dict[str, str] = {
+    "json": "application/json",
+    "jsonl": "application/x-ndjson",
+    "syslog": "application/x-syslog",
+    "text": "text/plain",
+    "csv": "text/csv",
+    "obl": "application/x-obl",
+}
+
+
+@dataclass
+class IngestRawOptions:
+    source: Optional[str] = None
+    environment: Optional[Environment] = None
+    level: Optional[LogLevel] = None
+    dataset: Optional[str] = None
+
+
 __all__ = [
     "LogLevel",
     "Environment",
@@ -197,4 +217,7 @@ __all__ = [
     "LOG_LEVEL_PRIORITY",
     "ValidationError",
     "validate_log_payload",
+    "FormatName",
+    "FORMAT_CONTENT_TYPES",
+    "IngestRawOptions",
 ]
