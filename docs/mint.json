@@ -1,7 +1,7 @@
 {
   "navigation": [
     {
-      "group": "SDKs",
+      "group": "Python SDK",
       "pages": [
         "sdks/python"
       ]
