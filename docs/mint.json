@@ -1,17 +1,10 @@
 {
-  "navigation": {
-    "tabs": [
-      {
-        "tab": "SDKs",
-        "groups": [
-          {
-            "group": "SDK Reference",
-            "pages": [
-              "sdks/python"
-            ]
-          }
-        ]
-      }
-    ]
-  }
+  "navigation": [
+    {
+      "group": "SDK Reference",
+      "pages": [
+        "sdks/python"
+      ]
+    }
+  ]
 }
