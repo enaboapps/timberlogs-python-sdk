@@ -10,7 +10,7 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.8"
 authors = [
-    { name = "Timberlogs", email = "timberlogs@proton.me" }
+    { name = "Timberlogs", email = "support@timberlogs.dev" }
 ]
 keywords = ["logging", "structured-logging", "observability", "timberlogs"]
 classifiers = [
